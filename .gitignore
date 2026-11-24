@@ -23,3 +23,13 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# planning / agent notes (kept locally, not published)
+AGENT_PROMPT.md
+Architecture.md
+DEPLOY_AND_DEMO.md
+Design.md
+MEMORY.md
+PRD.md
+Phases.md
+Rules.md
