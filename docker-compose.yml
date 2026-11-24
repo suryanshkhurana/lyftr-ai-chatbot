@@ -12,11 +12,11 @@ services:
       DATABASE_URL: sqlite:////data/app.db
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       ENABLE_FAILURE_SIMULATION: ${ENABLE_FAILURE_SIMULATION:-true}
-      LLM_MODEL: ${LLM_MODEL:-gemini/gemini-3.5-flash-lite}
+      LLM_MODEL: ${LLM_MODEL:-gemini/gemini-flash-lite-latest}
       LLM_API_BASE: ${LLM_API_BASE:-}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
       LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-2048}
-      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-12}
       DEFAULT_SYSTEM_PROMPT: ${DEFAULT_SYSTEM_PROMPT:-You are Lyftr AI, a helpful, concise assistant. Answer clearly and accurately.}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:

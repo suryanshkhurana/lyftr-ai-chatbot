@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     allowed_origins: str = Field(default="http://localhost:3000", alias="ALLOWED_ORIGINS")
     enable_failure_simulation: bool = Field(default=False, alias="ENABLE_FAILURE_SIMULATION")
 
-    llm_model: str = Field(default="gemini/gemini-3.5-flash-lite", alias="LLM_MODEL")
+    llm_model: str = Field(default="gemini/gemini-flash-lite-latest", alias="LLM_MODEL")
     llm_api_base: str | None = Field(default=None, alias="LLM_API_BASE")  # optional, e.g. OpenAI-compatible host
     llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
-    llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS")
+    llm_timeout_seconds: float = Field(default=12.0, alias="LLM_TIMEOUT_SECONDS")
     default_system_prompt: str = Field(
         default="You are Lyftr AI, a helpful, concise assistant. Answer clearly and accurately.",
         alias="DEFAULT_SYSTEM_PROMPT",

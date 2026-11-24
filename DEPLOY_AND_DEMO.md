@@ -21,7 +21,7 @@ Check that `.env` is **not** in the commit (`git ls-files | grep -i env` should 
    - `DATABASE_URL` = `sqlite:////data/app.db`
    - `ALLOWED_ORIGINS` = your frontend origin, e.g. `https://lyftr-ai.vercel.app` (no trailing slash; set it after step 3 and redeploy)
    - `ENABLE_FAILURE_SIMULATION` = `true`
-   - `LLM_MODEL` = `gemini/gemini-3.5-flash-lite`
+   - `LLM_MODEL` = `gemini/gemini-flash-lite-latest`
 3. Health check path: `/health`. Render injects `PORT`; the image honors it.
 4. Note: Render's free tier has no persistent disk, so `/data` resets on redeploy or idle restart, and free instances also sleep. For durable history, attach a paid Render Disk at `/data`, or use Railway with a volume mounted at `/data`. Local Docker persistence (the assignment's volume requirement) is unaffected.
 

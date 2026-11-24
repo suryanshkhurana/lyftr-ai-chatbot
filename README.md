@@ -12,9 +12,11 @@ docker-compose.yml  Makefile  .env.example
 
 | | URL |
 |---|---|
-| Frontend | Pending deployment |
-| Backend | Pending deployment |
-| Repository | Pending (public GitHub URL) |
+| Frontend | https://lyftr-ai-chatbot-two.vercel.app |
+| Backend | https://lyftr-ai-chatbot-pop8.onrender.com (e.g. [`/health`](https://lyftr-ai-chatbot-pop8.onrender.com/health)) |
+| Repository | https://github.com/suryanshkhurana/lyftr-ai-chatbot |
+
+The backend runs on Render's free tier: after ~15 minutes idle it sleeps, and the first request can take ~50 s to wake it. Its in-memory LiteLLM cache also resets when it sleeps or redeploys (history in SQLite does not reset on sleep; Render's free tier has no persistent disk, so a redeploy starts a fresh database).
 
 ## Run locally: with Docker and without
 
@@ -65,14 +67,14 @@ npm test                                                # 11 tests
 | `DATABASE_URL` | yes | SQLite URL. Docker: `sqlite:////data/app.db` (on the named volume). |
 | `ALLOWED_ORIGINS` | yes | Comma-separated CORS origins (the frontend URL). |
 | `ENABLE_FAILURE_SIMULATION` | yes | `true` enables the `X-Simulate-Failure` header. |
-| `LLM_MODEL` | no | LiteLLM model id, default `gemini/gemini-3.5-flash-lite`. |
+| `LLM_MODEL` | no | LiteLLM model id, default `gemini/gemini-flash-lite-latest`. |
 | `LLM_API_BASE` | no | Base URL for OpenAI-compatible/self-hosted endpoints. |
 | `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SECONDS` | no | Fixed generation settings (they are part of the cache identity). |
 | `DEFAULT_SYSTEM_PROMPT` | no | System prompt for sessions without an override. |
 | `LOG_LEVEL` | no | Default `INFO`. |
 | `VITE_API_BASE_URL` | frontend build | URL the **browser** uses to reach the backend. |
 
-Any LiteLLM-supported provider works. The default is Gemini because two free keys are easy to create in Google AI Studio.
+Any LiteLLM-supported provider works. The default is Gemini because two free keys are easy to create in Google AI Studio. `gemini-flash-lite-latest` is Google's alias for the current lite model, chosen after testing: `gemini-2.5-flash-lite` is no longer available to new keys, and newer pinned models were frequently returning `503 high demand` on the free tier. Gemini 3.x models reject `temperature`, so LiteLLM's `drop_params` drops unsupported params per model.
 
 ## Design decisions: key fallback, caching, SQLite session storage
 
@@ -159,7 +161,7 @@ Also supported: `key_1=429,key_2=500` and statuses `502`/`503`. The UI marks a f
 ## Setup Used: your editor and AI tools
 
 - AI: Claude (Anthropic) as a coding agent. It implemented the code from my specification documents (PRD, architecture, rules, phases, design), probed the pinned LiteLLM version's behavior, and wrote and ran the test suites.
-- Editor: _TODO: add your editor (e.g. VS Code)._
+- Editor: VS Code
 
 ## Bonus features (if any): what you added beyond the requirements and why
 

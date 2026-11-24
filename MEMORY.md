@@ -26,7 +26,7 @@
 - Per-call bypass for simulation: `cache={"no-cache": True, "no-store": True}`.
 
 ## Decisions
-- Default `LLM_MODEL=gemini/gemini-3.5-flash-lite`. Verified on user's real key 2026-11-24: gemini-3.5-flash-lite returns 404 "no longer available to new users" (still listed by ListModels); gemini-3.5-flash-lite works. Configurable.
+- Default `LLM_MODEL=gemini/gemini-flash-lite-latest` (see Deployed). Earlier: Verified on user's real key 2026-11-24: gemini-3.5-flash-lite returns 404 "no longer available to new users" (still listed by ListModels); gemini-3.5-flash-lite works. Configurable.
 - `litellm.drop_params = True` (set in gateway): gemini-3.5-flash-lite rejects `temperature` → UnsupportedParamsError on every key; dropping keeps max_tokens. Regression test in test_health.py.
 - Cache: LiteLLM `local` (in-memory) — resets on backend restart; documented.
 - Invalid/unknown X-Simulate-Failure when enabled → 422 with readable detail. Disabled → header ignored.
@@ -52,8 +52,16 @@
 - `docker compose down` keeps volume lyftr-ai_lyftr_data; history intact after `up`.
 - One transient incident: two fallback calls to key_2 hit the 30 s read timeout (Gemini-side stall); not reproducible afterwards, correctly returned 503.
 
+## Deployed (verified 2026-11-24 ~22:30 IST)
+- Frontend (Vercel, root `frontend`, VITE_API_BASE_URL set): https://lyftr-ai-chatbot-two.vercel.app
+- Backend (Render free, Docker, root `backend`, Oregon): https://lyftr-ai-chatbot-pop8.onrender.com — env: LLM_API_KEYS (2 Gemini keys), DATABASE_URL=sqlite:////data/app.db, ALLOWED_ORIGINS=https://lyftr-ai-chatbot-two.vercel.app,http://localhost:3000, ENABLE_FAILURE_SIMULATION=true, LLM_MODEL=gemini/gemini-flash-lite-latest, LLM_TIMEOUT_SECONDS=12.
+- Repo: https://github.com/suryanshkhurana/lyftr-ai-chatbot (public; .env not committed; .gitattributes forces LF).
+- Live checks passed: health; LIVE key_1; LLM_CACHE 5 ms new session; key_1=429 and key_1=500 → 200 key_2 fb=1; *=429 → 503.
+- Model history: gemini-2.5-flash-lite = 404 for new users; gemini-3.5-flash-lite and 3.1-flash-lite frequently 503 "high demand"/timeouts on free tier (both keys) on 2026-11-24 evening → switched to gemini-flash-lite-latest + 12 s timeout (defaults updated in code/compose/.env.example).
+- Free-tier Gemini instability can still make a failover test return 503 if the real key_2 is also unavailable — Google-side, not code.
+
 ## Blockers / remaining
 - Deployment (Render/Vercel or similar), public GitHub repo, 2 real Gemini keys, demo video, submission form — require user's accounts. Steps in DEPLOY_AND_DEMO.md. README "Live URLs" = Pending; README "Setup Used" editor = TODO for user.
 
 ## Next action
-- User: push repo (delete `_to_delete/` first); deploy backend then frontend; set ALLOWED_ORIGINS; run DEPLOY_AND_DEMO.md §4; fill README Live URLs; record demo.
+- User: fill README 'Setup Used' editor; commit + push; record demo (DEPLOY_AND_DEMO.md §5); submit form.
