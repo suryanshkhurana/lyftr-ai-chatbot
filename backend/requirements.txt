@@ -1,0 +1,9 @@
+# Runtime dependencies (pinned; behavior of LiteLLM Router/cache verified by tests against this version)
+litellm==1.110.3
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.4
+pydantic-settings==2.16.3
+# LiteLLM 1.110.3's cache-hit code path imports these (proxy import chain); without them hits fail silently.
+orjson==3.13.0
+soundfile==0.14.0
