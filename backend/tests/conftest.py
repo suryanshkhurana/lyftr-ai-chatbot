@@ -29,13 +29,17 @@ LIVE_DELAY_S = 0.15  # simulated provider round-trip, so live calls are measurab
 class MockProviderState:
     calls: list[dict] = field(default_factory=list)  # successful calls: {"api_key", "messages"}
     attempts: list[str] = field(default_factory=list)  # every provider attempt (api_key), including failures
-    failures: dict[str, int] = field(default_factory=dict)  # api_key -> real provider status to raise
+    failures: dict[str, int] = field(default_factory=dict)  # api_key -> real provider status to raise (0 = offline)
+    replies: dict[str, str] = field(default_factory=dict)  # api_key -> fixed reply text
+    requests: list[dict] = field(default_factory=list)  # every attempt: {"api_key", "headers", "timeout", "messages"}
     reply_override: str | None = None
 
     def reset(self) -> None:
         self.calls.clear()
         self.attempts.clear()
         self.failures.clear()
+        self.replies.clear()
+        self.requests.clear()
         self.reply_override = None
 
 
@@ -44,6 +48,8 @@ STATE = MockProviderState()
 
 def _provider_error(status: int):
     kw = {"message": f"mock provider HTTP {status}", "llm_provider": "mockllm", "model": MODEL}
+    if status == 0:
+        return litellm.APIConnectionError(message="mock provider offline", llm_provider="mockllm", model=MODEL)
     return {
         429: litellm.RateLimitError,
         500: litellm.InternalServerError,
@@ -55,14 +61,21 @@ def _provider_error(status: int):
 class MockLLM(CustomLLM):
     async def acompletion(self, model, messages, api_key=None, **kwargs):  # type: ignore[override]
         STATE.attempts.append(api_key)
+        STATE.requests.append(
+            {"api_key": api_key, "headers": kwargs.get("headers"), "timeout": kwargs.get("timeout"),
+             "messages": [dict(m) for m in messages]}
+        )
         await asyncio.sleep(LIVE_DELAY_S)
         if api_key in STATE.failures:
             raise _provider_error(STATE.failures[api_key])
         STATE.calls.append({"api_key": api_key, "messages": [dict(m) for m in messages]})
         last_user = next(m["content"] for m in reversed(messages) if m["role"] == "user")
-        reply = STATE.reply_override if STATE.reply_override is not None else (
-            f"reply #{len(STATE.calls)} to: {last_user}"
-        )
+        if api_key in STATE.replies:
+            reply = STATE.replies[api_key]
+        elif STATE.reply_override is not None:
+            reply = STATE.reply_override
+        else:
+            reply = f"reply #{len(STATE.calls)} to: {last_user}"
         prompt_tokens = sum(len(m["content"].split()) + 4 for m in messages)
         completion_tokens = len(reply.split()) if reply else 0
         return ModelResponse(

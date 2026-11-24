@@ -72,6 +72,8 @@ npm test                                                # 11 tests
 | `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SECONDS` | no | Fixed generation settings (they are part of the cache identity). |
 | `DEFAULT_SYSTEM_PROMPT` | no | System prompt for sessions without an override. |
 | `LOG_LEVEL` | no | Default `INFO`. |
+| `FALLBACK_LLM_MODEL`, `FALLBACK_LLM_API_BASE`, `FALLBACK_LLM_API_KEY` | no | Optional self-hosted last-resort fallback (see Design decisions). Disabled unless all three are set. |
+| `FALLBACK_LLM_TIMEOUT_SECONDS` | no | Fallback timeout, default `120` (laptop GPU). |
 | `VITE_API_BASE_URL` | frontend build | URL the **browser** uses to reach the backend. |
 
 Any LiteLLM-supported provider works. The default is Gemini because two free keys are easy to create in Google AI Studio. `gemini-flash-lite-latest` is Google's alias for the current lite model, chosen after testing: `gemini-2.5-flash-lite` is no longer available to new keys, and newer pinned models were frequently returning `503 high demand` on the free tier. Gemini 3.x models reject `temperature`, so LiteLLM's `drop_params` drops unsupported params per model.
@@ -96,6 +98,16 @@ Any LiteLLM-supported provider works. The default is Gemini because two free key
 2. The Router passes `caching=False` unless `cache_responses=True` is set.
 
 A hit is detected with `response._hidden_params["cache_hit"] is True` and reports `LLM_CACHE`, `key_id: null`, `fallback_attempts: 0`. It returns the identical text and the usage stored with the cached response. LiteLLM writes cache entries in a background task, so a request fired within milliseconds of the first may still be live. Because the cache is in-memory, it resets when the backend restarts; history does not.
+
+**Self-hosted last-resort fallback (optional, bonus).** If `FALLBACK_LLM_MODEL`, `FALLBACK_LLM_API_BASE` and `FALLBACK_LLM_API_KEY` are set, one extra provider is tried, but only after **every** key in the pool has failed for that request. In the deployed setup it is Qwen3-14B in LM Studio on a laptop, exposed with ngrok (`openai/qwen/qwen3-14b`, OpenAI-compatible). The key pool, its order, `/health` and `keys_configured` are unchanged.
+- It is one async `litellm.acompletion` call with a 120 s timeout, `num_retries=0`, and the header `ngrok-skip-browser-warning: true`.
+- ` /no_think` is appended to the last user message of a *copy* of the prompt; history keeps the original text. A closed `<think>…</think>` block is stripped from the reply; an unclosed `<think>` or an empty reply counts as a failure.
+- A fallback answer reports `key_id: "fallback"`. That is a safe identifier, **not** a key from `LLM_API_KEYS`. It also reports `model` = the fallback model, `LIVE_INFERENCE`, and `fallback_attempts` = the number of pool keys that failed first.
+- If the fallback also fails (offline laptop, stopped ngrok, timeout, HTTP error, thinking-only reply), the response is the same `503 {"detail":"all providers unavailable"}` and nothing is stored.
+- The fallback never reads or writes the LiteLLM cache (`caching=False` plus `no-cache`/`no-store`). LiteLLM stores a response before the app validates it, so a thinking-only reply would otherwise be cached and replayed. Pool answers are cached exactly as before.
+- Worst case, when every Gemini key times out and the fallback is slow: about 3 × 12 s + 120 s ≈ 2.5 minutes before a reply or a 503.
+- Privacy: prompts that reach the fallback are processed on a third-party laptop (the friend hosting it).
+- `X-Simulate-Failure` targets: `key_N` (one key), `keys` (every pool key, so the fallback answers), `fallback` (only the fallback) and `*` (every pool key **and** the fallback). That is why `*=429` still returns the required 503.
 
 **Tokens and latency.** `input_tokens`/`output_tokens` are the provider's `usage.prompt_tokens`/`completion_tokens` for that single request, covering system prompt, history, and new message, never a running total. If a provider omits usage, LiteLLM's `token_counter` is used. `latency_ms` is server-measured wall time for the request, from receipt until the completion is available.
 
@@ -152,9 +164,18 @@ curl -s $B/sessions/demo-4/messages -w ' %{http_code}\n'
 
 Also supported: `key_1=429,key_2=500` and statuses `502`/`503`. The UI marks a failover reply with "via key_2 after 1 failed key".
 
+**Self-hosted fallback** (only if the `FALLBACK_LLM_*` variables are set and the fallback server is online):
+
+```bash
+curl -s -XPOST $B/chat -H 'Content-Type: application/json' -H 'X-Simulate-Failure: keys=429' -d '{"session_id":"demo-5","message":"What is 2+2?"}'
+# 200, "key_id":"fallback", "model":"openai/qwen/qwen3-14b", "fallback_attempts":<number of keys>
+curl -s -XPOST $B/chat -H 'Content-Type: application/json' -H 'X-Simulate-Failure: *=429' -d '{"session_id":"demo-6","message":"hi"}' -w ' %{http_code}\n'
+# {"detail":"all providers unavailable"} 503  (* includes the fallback)
+```
+
 **Validation:** an empty or whitespace-only message, a missing `session_id`, a message over 4000 characters, or malformed JSON returns 422 JSON. Pasting more than 4000 characters into the UI shows the error inline.
 
-**Automated tests** (no real keys, no network): `cd backend && python -m pytest` gives **57 passed**; `cd frontend && npm test` gives **11 passed**.
+**Automated tests** (no real keys, no network): `cd backend && python -m pytest` gives **88 passed**; `cd frontend && npm test` gives **11 passed**.
 - Backend tests run the real LiteLLM Router, fallback, and cache code against a registered LiteLLM `CustomLLM` mock provider. They cover the contract, 422/503/404 bodies, nothing saved on failure, simulated and *real* provider 429/5xx failover, 3-key fallback counts, cache hits across sessions (including after a fallback), cache misses on different prompt/history/system prompt/model, latency ordering, token accounting, session isolation, system-prompt persistence, history order, restart persistence, CORS, exactly three routes, and keys never appearing in responses or logs.
 - I also verified end to end over real HTTP: uvicorn with LiteLLM's `openai/` provider against a local mock OpenAI-compatible server, plus the production frontend bundle driven in headless Chrome.
 
@@ -170,3 +191,4 @@ Also supported: `key_1=429,key_2=500` and statuses `502`/`503`. The UI marks a f
 - **Service status indicator**: the header calls the existing `GET /health` once on load. No extra backend route.
 - **Secret redaction in logs**: every log record, including LiteLLM's, has configured keys replaced with `***` (tested).
 - **Shared cache across keys** via LiteLLM `caching_groups`, so an answer produced during an outage is reused once the primary key recovers.
+- **Self-hosted last-resort fallback** (Qwen3-14B via LM Studio + ngrok): when every Gemini key fails, as happened during development when Gemini's free tier returned `503 high demand` on all keys, one OpenAI-compatible fallback is tried. It is off unless configured, never changes the key-pool behaviour or the required `*=429` → 503 result, and is covered by 31 tests. See Design decisions.

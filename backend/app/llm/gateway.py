@@ -11,10 +11,12 @@ from litellm import Router
 
 from app.llm import cache
 from app.llm.failure_simulation import (
+    FALLBACK_TARGET,
     FailureSimulationHook,
     reset_active_simulation,
     set_active_simulation,
 )
+from app.llm.fallback import FALLBACK_KEY_ID, FallbackClient, FallbackFailed
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +59,14 @@ class LLMGateway:
         max_tokens: int,
         timeout_seconds: float,
         api_base: str | None = None,
+        fallback: FallbackClient | None = None,
     ) -> None:
         if len(api_keys) < 2:
             raise ValueError("at least two API keys are required")
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.fallback = fallback
         self.key_ids = key_ids_for(len(api_keys))
         model_list = [
             {
@@ -104,6 +108,36 @@ class LLMGateway:
         return len(self.key_ids)
 
     async def complete(self, messages: list[dict[str, str]], simulation: dict[str, int] | None) -> Completion:
+        """Key pool first; the optional self-hosted fallback only after every pool key failed."""
+        try:
+            result = await self._complete_pool(messages, simulation)
+        except ProvidersUnavailable:
+            if self.fallback is None:
+                raise
+            result = await self._complete_fallback(messages, simulation)
+        served_by = "cache" if result.cache_hit else result.key_id
+        logger.info("served_by=%s source=%s", served_by, "LLM_CACHE" if result.cache_hit else "LIVE_INFERENCE")
+        return result
+
+    async def _complete_fallback(
+        self, messages: list[dict[str, str]], simulation: dict[str, int] | None
+    ) -> Completion:
+        assert self.fallback is not None
+        if simulation and FALLBACK_TARGET in simulation:
+            logger.warning("fallback failed: simulated HTTP %s", simulation[FALLBACK_TARGET])
+            raise ProvidersUnavailable
+        logger.info("key pool exhausted; trying self-hosted fallback")
+        try:
+            reply = await self.fallback.complete(messages)
+        except FallbackFailed as exc:
+            logger.warning("fallback failed: %s", exc)
+            raise ProvidersUnavailable from None
+        # Every pool key failed before the fallback answered.
+        return Completion(
+            reply.reply, reply.model, reply.input_tokens, reply.output_tokens, False, FALLBACK_KEY_ID, len(self.key_ids)
+        )
+
+    async def _complete_pool(self, messages: list[dict[str, str]], simulation: dict[str, int] | None) -> Completion:
         kwargs: dict[str, Any] = {
             "model": self.key_ids[0],
             "messages": messages,
@@ -138,8 +172,6 @@ class LLMGateway:
             logger.warning("could not identify answering deployment (model_id=%r)", key_id)
             key_id = None
         fallback_attempts = self._fallback_attempts(key_id)
-        if fallback_attempts:
-            logger.info("answered by %s after %d failed key(s)", key_id, fallback_attempts)
         return Completion(reply, self.model, input_tokens, output_tokens, False, key_id, fallback_attempts)
 
     def _fallback_attempts(self, key_id: str | None) -> int:

@@ -23,7 +23,7 @@ def test_simulated_key_1_failure_falls_back_to_key_2(client, settings, status):
     assert body["metadata"]["resolution_source"] == "LIVE_INFERENCE"
     # A real completion came from key_2's deployment; key_1 was never actually called.
     assert [c["api_key"] for c in STATE.calls] == [FAKE_KEYS[1]]
-    assert body["reply"] == f"reply #1 to: hello"
+    assert body["reply"] == "reply #1 to: hello"
     assert len(message_rows(settings)) == 2
 
 

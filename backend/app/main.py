@@ -19,6 +19,7 @@ from app.db.connection import Database
 from app.db.repository import ChatRepository
 from app.db.schema import create_schema
 from app.llm import cache
+from app.llm.fallback import FallbackClient
 from app.llm.gateway import LLMGateway, ProvidersUnavailable
 from app.services.chat_service import ChatService
 
@@ -29,12 +30,23 @@ ALL_PROVIDERS_UNAVAILABLE = {"detail": "all providers unavailable"}
 
 def create_app(settings: Settings | None = None, gateway: LLMGateway | None = None) -> FastAPI:
     settings = settings or get_settings()
-    configure_logging(settings.log_level, settings.api_keys)
+    secrets = [*settings.api_keys, settings.fallback_llm_api_key.strip()]
+    configure_logging(settings.log_level, secrets)
     litellm.suppress_debug_info = True
 
     db = Database(settings.sqlite_path)
     repo = ChatRepository(db)
     key_error = settings.key_config_error
+    fallback = None
+    if settings.fallback_enabled:
+        fallback = FallbackClient(
+            model=settings.fallback_llm_model.strip(),
+            api_base=settings.fallback_llm_api_base.strip(),
+            api_key=settings.fallback_llm_api_key.strip(),
+            timeout_seconds=settings.fallback_llm_timeout_seconds,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
     if gateway is None and key_error is None:
         gateway = LLMGateway(
             api_keys=settings.api_keys,
@@ -43,6 +55,7 @@ def create_app(settings: Settings | None = None, gateway: LLMGateway | None = No
             max_tokens=settings.llm_max_tokens,
             timeout_seconds=settings.llm_timeout_seconds,
             api_base=settings.llm_api_base or None,
+            fallback=fallback,
         )
     if gateway is None:
         logger.error("key pool not loaded: %s", key_error)
@@ -53,11 +66,12 @@ def create_app(settings: Settings | None = None, gateway: LLMGateway | None = No
         create_schema(db)
         cache.warm_up_cache_path()
         logger.info(
-            "started: keys=%d model=%s cache=%s simulation=%s db=%s",
+            "started: keys=%d model=%s cache=%s simulation=%s fallback=%s db=%s",
             gateway.keys_configured if gateway else 0,
             settings.llm_model,
             cache.cache_enabled(),
             settings.enable_failure_simulation,
+            settings.fallback_llm_model.strip() if fallback else "off",
             settings.sqlite_path,
         )
         yield

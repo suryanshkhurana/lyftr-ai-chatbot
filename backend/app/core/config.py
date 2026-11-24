@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    # Optional self-hosted last-resort fallback (OpenAI-compatible). Disabled unless model, base and key are set.
+    fallback_llm_model: str = Field(default="", alias="FALLBACK_LLM_MODEL")
+    fallback_llm_api_base: str = Field(default="", alias="FALLBACK_LLM_API_BASE")
+    fallback_llm_api_key: str = Field(default="", alias="FALLBACK_LLM_API_KEY")
+    fallback_llm_timeout_seconds: float = Field(default=120.0, alias="FALLBACK_LLM_TIMEOUT_SECONDS")
+
+    @property
+    def fallback_enabled(self) -> bool:
+        return all(v.strip() for v in (self.fallback_llm_model, self.fallback_llm_api_base, self.fallback_llm_api_key))
+
     @property
     def api_keys(self) -> list[str]:
         """Comma-separated keys, trimmed; empty entries are dropped (and reported via key_config_error)."""

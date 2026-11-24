@@ -23,8 +23,16 @@ class InvalidSimulationHeader(ValueError):
     pass
 
 
+FALLBACK_TARGET = "fallback"
+POOL_TARGET = "keys"
+
+
 def parse_simulation_header(value: str, key_ids: list[str]) -> dict[str, int]:
-    """Parse ``key_1=429,key_2=500`` / ``*=429`` into {key_id: status} for configured keys."""
+    """Parse ``key_1=429,key_2=500`` / ``keys=429`` / ``fallback=503`` / ``*=429`` into {target: status}.
+
+    Targets: ``key_N`` (one pool key), ``keys`` (every pool key), ``fallback`` (only the self-hosted
+    fallback) and ``*`` (every pool key AND the fallback, so ``*`` still yields the assignment's 503).
+    """
     result: dict[str, int] = {}
     parts = [p.strip() for p in value.split(",") if p.strip()]
     if not parts:
@@ -42,10 +50,16 @@ def parse_simulation_header(value: str, key_ids: list[str]) -> dict[str, int]:
         if target == WILDCARD:
             for kid in key_ids:
                 result[kid] = status
-        elif target in key_ids:
+            result[FALLBACK_TARGET] = status
+        elif target == POOL_TARGET:
+            for kid in key_ids:
+                result[kid] = status
+        elif target == FALLBACK_TARGET or target in key_ids:
             result[target] = status
         else:
-            raise InvalidSimulationHeader(f"unknown key id '{target}'; configured: {', '.join(key_ids)}")
+            raise InvalidSimulationHeader(
+                f"unknown target '{target}'; use one of: {', '.join(key_ids)}, {POOL_TARGET}, {FALLBACK_TARGET}, *"
+            )
     return result
 
 
