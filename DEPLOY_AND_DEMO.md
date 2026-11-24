@@ -23,7 +23,7 @@ Check that `.env` is **not** in the commit (`git ls-files | grep -i env` should 
    - `ENABLE_FAILURE_SIMULATION` = `true`
    - `LLM_MODEL` = `gemini/gemini-flash-lite-latest`
 3. Health check path: `/health`. Render injects `PORT`; the image honors it.
-4. Note: Render's free tier has no persistent disk, so `/data` resets on redeploy or idle restart, and free instances also sleep. For durable history, attach a paid Render Disk at `/data`, or use Railway with a volume mounted at `/data`. Local Docker persistence (the assignment's volume requirement) is unaffected.
+4. Note: Render's free tier has an ephemeral filesystem, so `/data` (the SQLite file) resets whenever the service sleeps (~15 min idle), restarts or redeploys. For durable history, attach a paid Render Disk at `/data`, or use Railway with a volume mounted at `/data`. Local Docker persistence (the assignment's volume requirement) is unaffected.
 
 Alternatives: Railway (Dockerfile, add a volume at `/data`), Fly.io (`fly launch` in `backend/`, volume at `/data`), or Hugging Face Spaces (Docker Space; set `PORT=7860`).
 

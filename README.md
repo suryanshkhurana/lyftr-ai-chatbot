@@ -16,7 +16,7 @@ docker-compose.yml  Makefile  .env.example
 | Backend | https://lyftr-ai-chatbot-pop8.onrender.com (e.g. [`/health`](https://lyftr-ai-chatbot-pop8.onrender.com/health)) |
 | Repository | https://github.com/suryanshkhurana/lyftr-ai-chatbot |
 
-The backend runs on Render's free tier: after ~15 minutes idle it sleeps, and the first request can take ~50 s to wake it. Its in-memory LiteLLM cache also resets when it sleeps or redeploys (history in SQLite does not reset on sleep; Render's free tier has no persistent disk, so a redeploy starts a fresh database).
+The backend runs on Render's free tier: after ~15 minutes idle it sleeps, and the first request can take ~50 s to wake it. Render's free tier has an ephemeral filesystem and no persistent disks, so the deployed SQLite file (and the in-memory LiteLLM cache) is reset whenever the service sleeps, restarts or redeploys. History persists normally while it is awake. Durable persistence is what the Docker setup provides: the named volume `lyftr_data` at `/data` survives `make down` / `make up` (verified). On Render it would need a paid instance with a disk mounted at `/data`; no code change is required.
 
 ## Run locally: with Docker and without
 
